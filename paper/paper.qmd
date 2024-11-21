@@ -1,10 +1,8 @@
 ---
-title: "My title"
-subtitle: "My subtitle if needed"
+title: "Forecasting Stock Market Dynamics in the Tech Sector: A Multi-Stock Gradient Boosting Approach"
 author: 
-  - First author
-  - Another author
-thanks: "Code and data are available at: [https://github.com/RohanAlexander/starter_folder](https://github.com/RohanAlexander/starter_folder)."
+  - Jamie Lee
+thanks: "Code and data are available at: https://github.com/jamiejiminlee/Tech-Stock-Forecast.git"
 date: today
 date-format: long
 abstract: "First sentence. Second sentence. Third sentence. Fourth sentence."
@@ -19,7 +17,10 @@ bibliography: references.bib
 #| message: false
 
 library(tidyverse)
-library(palmerpenguins)
+library(ggplot2)
+library(arrow)
+
+price_analysis_data <- read_parquet("/Users/jamielee/TechStockForecast/data/02-analysis_data/analysis_data.parquet")
 ```
 
 
@@ -44,18 +45,44 @@ Telegraphing paragraph: The remainder of this paper is structured as follows. @s
 
 ## Overview
 
-We use the statistical programming language R [@citeR].... Our data [@shelter].... Following @tellingstories, we consider...
+The data for this paper, obtained from the Yahoo Finance API via the `tidyquant` library in R on November 19, 2024, encompasses historical stock price information for four leading technology companies: Google (GOOG), Apple (AAPL), Amazon (AMZN), and Microsoft (MSFT). This dataset spans from January 1, 2018, to December 31, 2024, providing daily stock market data for each company. Key variables include **`symbol`**, **`date`**, **`open`**, **`high`**, **`low`**, **`close`**, **`volume`**, and **`adjusted`** prices. Our analysis focuses on predicting daily price differences and percentage changes across this basket of stocks, leveraging additional features constructed from the raw dataset. These features include **`Price_Lag1`** (lagged closing prices), **`Price_Diff`** (daily price differences), and **`Price_Change_Percent`** (percentage changes). By incorporating these derived variables, we aim to capture sequential trends and normalize differences across stocks with varying price ranges.
 
-Overview text
+To ensure reliability, the dataset was preprocessed to remove missing values, align timeframes across stocks, and compute the constructed variables. Observations with incomplete data were excluded to maintain consistency in analysis. Details on the data cleaning and feature construction process are provided in [Appendix -@sec-data-cleaning].
 
-## Measurement
+Data cleaning and analysis were conducted using the following packages: the `tidyverse` package of @Tidyverse, `lubridate` package of @Lubridate, and `arrow` package of @arrow. These tools facilitated efficient data manipulation, feature construction, and storage in a compact Parquet format for further analysis.
 	
-Some paragraphs about how we go from a phenomena in the world to an entry in the dataset.
+## Measurement
 
-## Outcome variables
+Stock prices are influenced by numerous factors, including macroeconomic conditions, industry trends, corporate actions, and investor sentiment. These dynamics fluctuate frequently, often in response to earnings reports, geopolitical events, or shifts in market expectations. Financial data simplifies these complex market behaviors into numerical indicators such as **`open`**, **`high`**, **`low`**, and **`close`** prices, which, while precise, may not fully encapsulate underlying investor motivations or market sentiment. For instance, the closing price represents only the last traded price of the day, smoothing out intraday volatility and obscuring more nuanced trading patterns.
 
-Add graphs, tables and text. Use sub-sub-headings for each outcome variable or update the subheading to be singular.
+Constructed variables like **`Price_Diff`** and **`Price_Change_Percent`** aim to quantify daily stock price movements by measuring differences or proportional changes relative to the previous day. However, these metrics assume that price movements reflect consistent investor sentiment across all stocks, potentially overlooking idiosyncratic factors specific to individual companies, such as leadership changes or product launches. Additionally, these metrics equally weight all days, despite certain trading days (e.g., earnings announcements or market holidays) being more influential.
 
+The **`volume`** variable, representing the total shares traded, is used as a proxy for market activity and investor interest. This assumes that higher trading volumes uniformly indicate significant market events, despite possible differences in trading motives, such as speculative activity or algorithmic trading. Similarly, the temporal predictors, including **`date`**, **`day of the week`**, and **`month`**, aim to capture seasonal trends or trading patterns. However, these features simplify complex market behaviors into discrete time intervals, potentially overlooking shorter-term dynamics like market reactions to breaking news or macroeconomic data releases.
+
+By aggregating these variables across a basket of stocks, the model assumes comparability among them, despite differences in market capitalization, industry focus, and investor bases. This simplification may obscure unique drivers of price changes for each stock, potentially limiting the model’s ability to capture more granular patterns. Nonetheless, these variables collectively provide a structured framework for analyzing and predicting daily price movements within the selected basket of stocks.
+
+
+## Variables
+The collected data from Yahoo Finance includes several key variables relevant to the analysis of price changes across a basket of tech stocks (**Google**, **Apple**, **Amazon**, and **Microsoft**). The original dataset contains the following columns:
+
+- **`symbol`**: Represents the stock ticker symbol, identifying the company (e.g., GOOG for Google, AAPL for Apple).
+- **`date`**: The trading date, essential for tracking and analyzing temporal patterns.
+- **`open`**: The stock's opening price on a given day, providing context for daily price movements.
+- **`high`**: The highest price of the stock during the trading day, useful for understanding intraday volatility.
+- **`low`**: The lowest price of the stock during the trading day, another measure of volatility.
+- **`close`**: The stock's closing price on a given day, which is a standard benchmark for daily performance.
+- **`volume`**: The total number of shares traded during the day, reflecting market activity and investor interest.
+- **`adjusted`**: The adjusted closing price, accounting for corporate actions like stock splits and dividends to provide a standardized measure of value.
+
+In addition to these original variables, new features were constructed to enhance the analysis:
+
+- **`Price_Lag1`**: Derived as the closing price from the previous trading day, enabling the analysis of sequential price changes.
+- **`Price_Diff`**: Calculated as the difference between the current day’s closing price and the previous day’s closing price, capturing day-to-day fluctuations.
+- **`Price_Change_Percent`**: Derived as the percentage change in stock price relative to the previous day's closing price, normalized to enable comparisons across stocks.
+
+These constructed variables allow for a more detailed examination of stock price movements. To ensure high-quality analysis, the data was cleaned and preprocessed to remove missing values, align timeframes across stocks, and compute these derived features. For further details on the data cleaning and preparation process, refer to [Appendix -@sec-data-cleaning].
+
+### Predictor Variables
 
 
 Some of our data is of penguins (@fig-bills), from @palmerpenguins.
