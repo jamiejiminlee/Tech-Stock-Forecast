@@ -19,6 +19,8 @@ bibliography: references.bib
 library(tidyverse)
 library(ggplot2)
 library(arrow)
+library(kableExtra)
+library(xgboost)
 
 price_analysis_data <- read_parquet("/Users/jamielee/TechStockForecast/data/02-analysis_data/analysis_data.parquet")
 ```
@@ -82,93 +84,153 @@ In addition to these original variables, new features were constructed to enhanc
 
 These constructed variables allow for a more detailed examination of stock price movements. To ensure high-quality analysis, the data was cleaned and preprocessed to remove missing values, align timeframes across stocks, and compute these derived features. For further details on the data cleaning and preparation process, refer to [Appendix -@sec-data-cleaning].
 
-### Predictor Variables
+### Outcome Variables
 
+The outcome variable for this paper is the **Daily Percentage Change (`Price_Change_Percent`)**, which measures the proportional change in a stock's closing price relative to its previous day’s closing price. This variable is calculated as:
 
-Some of our data is of penguins (@fig-bills), from @palmerpenguins.
+\[
+\text{Price\_Change\_Percent} = \frac{\text{close} - \text{Price\_Lag1}}{\text{Price\_Lag1}} \times 100
+\]
+
+This metric normalizes price movements across the basket of stocks, enabling meaningful comparisons despite differences in price ranges between stocks such as Google (**GOOG**), Apple (**AAPL**), Amazon (**AMZN**), and Microsoft (**MSFT**). By focusing on percentage changes, the analysis captures the relative daily performance of each stock, providing insights into trends and volatility. This variable is widely used in financial analysis to track and compare stock performance over time, making it a suitable choice for this study.
 
 ```{r}
-#| label: fig-bills
-#| fig-cap: Bills of penguins
+#| label: fig-outcome-var
+#| fig-cap: Distribution of Daily Percentage Changes by Stock
 #| echo: false
 
-ggplot(penguins, aes(x = island, fill = species)) +
-  geom_bar(alpha = 0.8) +
-  scale_fill_manual(values = c("darkorange","purple","cyan4"),
-                    guide = "none") +
+#### Facet-Wrapped Density Plots ####
+ggplot(price_analysis_data, aes(x = Price_Change_Percent, fill = symbol)) +
+  geom_density(alpha = 0.7) +
+  facet_wrap(~ symbol, scales = "free", ncol = 2) +
+  labs(
+    x = "Daily Percentage Change (%)",
+    y = "Density",
+    fill = "Stock Symbol"
+  ) +
   theme_minimal() +
-  facet_wrap(~species, ncol = 1) +
-  coord_flip()
+  theme(legend.position = "none")
 ```
+@fig-outcome-var above illustrates the distribution of **Daily Percentage Changes (`Price_Change_Percent`)** for each stock in the basket: Apple (**AAPL**), Amazon (**AMZN**), Google (**GOOG**), and Microsoft (**MSFT**). Each panel represents a stock, providing a separate density curve that highlights its unique distribution pattern. Across all stocks, the distributions exhibit a sharp central peak around 0%, indicating that most daily percentage changes are minor. However, the tails of the distributions reveal occasional larger price movements, both positive and negative, reflecting the volatility inherent in stock markets. Notably, the widths of the distributions differ slightly among the stocks, with Amazon (AMZN) displaying a broader tail, suggesting higher variability in its daily percentage changes compared to others.
 
-Talk more about it.
 
-And also planes (@fig-planes). (You can change the height and width, but don't worry about doing that until you have finished every other aspect of the paper - Quarto will try to make it look nice and the defaults usually work well once you have enough text.)
+### Predictor variables
+
+To forecast the daily percentage changes in stock prices (**`Price_Change_Percent`**), several predictor variables are utilized, derived from the cleaned dataset. These predictors encompass historical price trends, market activity metrics, and temporal features, offering a comprehensive framework for modeling stock price behavior:
+
+- **`Price_Lag1`**: The closing price of the stock on the previous trading day. This variable captures the most recent historical price trend, which is often a strong predictor of subsequent price movements.
+
+- **`volume`**: The total number of shares traded on a given day. This variable reflects market activity and investor interest, with higher volumes often indicating significant events or changes in sentiment.
+
+- **`open`**: The stock’s opening price on a given day. This metric provides context for intraday price dynamics and can indicate whether the day begins with positive or negative momentum.
+
+- **`high`**: The highest price the stock reached during the trading day. This variable highlights the potential upward volatility within the day, offering insights into optimistic trading behavior.
+
+- **`low`**: The lowest price the stock reached during the trading day. This variable captures the potential downward volatility, reflecting pessimistic market behavior.
+
+- **`adjusted`**: The adjusted closing price, which accounts for corporate actions like stock splits and dividends. This ensures a standardized measure of value over time, enabling better comparisons across stocks.
+
+- **`date`**: The trading date, used to derive temporal features such as the day of the week and the month. Temporal variables capture seasonal trends and trading patterns that can influence stock prices.
+
+These predictor variables enables the model to incorporate historical price trends, market dynamics, and seasonal influences, providing a robust basis for forecasting daily percentage changes in stock prices. By leveraging this diverse set of predictors, the analysis aims to identify patterns and relationships that drive stock price fluctuations across the basket of tech stocks.
 
 ```{r}
-#| label: fig-planes
-#| fig-cap: Relationship between wing length and width
+#| label: tbl-pred-var
+#| tbl-cap: Sample of Predictor Variables
 #| echo: false
 #| warning: false
 #| message: false
 
-analysis_data <- read_csv(here::here("data/02-analysis_data/analysis_data.csv"))
+#### Select Predictor Variables and Round Values ####
+predictor_sample <- price_analysis_data %>%
+  select(
+    symbol, date, Price_Lag1, volume, open, high, low, adjusted
+  ) %>%
+  sample_n(5) %>% # Randomly select 5 rows
+  mutate(
+    across(where(is.numeric), ~ round(.x, 2)) # Round all numeric columns to 2 decimal places
+  )
 
-analysis_data |> 
-  ggplot(aes(x = width, y = length)) +
-  geom_point(alpha = 0.8) +
-  theme_minimal() +
-  labs(x = "Wing width (mm)",
-       y = "Wing length (mm)")
+#### Display Table ####
+kable(
+  predictor_sample,
+  col.names = c(
+    "Stock Symbol", "Date", "Previous Close (Price_Lag1)", 
+    "Volume", "Opening Price", "Highest Price", 
+    "Lowest Price", "Adjusted Close"
+  ))
+
 ```
-
-Talk way more about it. 
-
-## Predictor variables
-
-Add graphs, tables and text.
-
-Use sub-sub-headings for each outcome variable and feel free to combine a few into one if they go together naturally.
-
-
-
-
-
-
+@tbl-pred-var displays a random sample of five rows from the dataset, showcasing the predictor variables used in the analysis. These variables include **stock symbol**, **date**, **previous day's closing price ($\text{Price\_Lag1}$)**, **volume**, **opening price**, **highest price**, **lowest price**, and **adjusted closing price**. The data highlights the variability across stocks and trading days, with differences in prices and trading volumes reflecting unique market conditions. For instance, Google (GOOG) on 2024-07-18 had a closing price of \$182.62, while Apple (AAPL) on 2023-03-13 exhibited significant movement, with a high of \$153.14 and a low of \$147.70. These variables collectively provide a robust foundation for modeling and forecasting daily percentage changes in stock prices.
 
 
 # Model
 
-The goal of our modelling strategy is twofold. Firstly,...
+## Model Overview
 
-Here we briefly describe the Bayesian analysis model used to investigate... Background details and diagnostics are included in [Appendix -@sec-model-details].
+This analysis employs an **XGBoost [@xgboost] regression model** to predict daily stock price changes, specifically focusing on the variable Price_Diff, which measures the difference in stock prices from one trading day to the next. By leveraging key predictors derived from historical data and stock market activity, the model identifies patterns and trends that inform short-term price movements. The XGBoost algorithm was selected for its efficiency and ability to handle large datasets, as well as its effectiveness in capturing non-linear relationships and interactions among variables. Background details and diagnostics are included in [Appendix -@sec-model-details].
+
+## Model Assumptions
+
+The XGBoost regression model used in this analysis relies on several key assumptions:
+
+- **Independence of Observations**: The daily percentage changes in stock prices are assumed to be independent of each other. This implies that the prediction for one day does not influence or depend on the prediction for other days.
+
+- **Relevance of Predictors**: The chosen predictors (e.g., `Price_Lag1`, `Price_Change_Percent`, `volume`, `open`, `high`, `low`, and `adjusted`) are assumed to adequately capture the key factors driving stock price changes. The model assumes no critical predictive variable is missing.
+
+- **Stationarity of Features**: The statistical properties of the predictors, such as their mean and variance, are assumed to remain stable over time within the training and testing periods. This is crucial for the model to generalize well to future data.
+
+- **No Multicollinearity**: The predictors are assumed to not be highly correlated with each other. Although gradient boosting models are robust to some multicollinearity, extreme collinearity could still negatively affect feature importance and model interpretation.
+
+- **Consistency of Temporal Effects**: Temporal variables, such as `date` and derived features like day of the week, are assumed to capture stable patterns in stock price movements across the training and testing periods.
+
+- **Additivity of Effects**: The model assumes that the combined effects of the predictors on the outcome variable (`Price_Diff`) can be captured additively through the boosting algorithm. Non-linear interactions are handled automatically by XGBoost, but this assumption helps guide the model design.
+
+- **Complete Data**: The model assumes that missing data has been appropriately handled during preprocessing. This includes imputation, removal, or encoding of missing values.
+
+These assumptions form the foundation of the modeling approach. Addressing potential violations, such as temporal dependencies or changes in feature distributions, will be discussed in the limitations section.
 
 ## Model set-up
 
-Define $y_i$ as the number of seconds that the plane remained aloft. Then $\beta_i$ is the wing width and $\gamma_i$ is the wing length, both measured in millimeters.  
+Define $y_i$ as the daily price difference for a given stock on day $i$. The predictors include $\text{Price\_Lag1}_i$, the lagged closing price, and other market and temporal features such as $\text{volume}_i$, $\text{open}_i$, $\text{high}_i$, $\text{low}_i$, and $\text{adjusted}_i$. The relationship is modeled as:
 
-\begin{align} 
-y_i|\mu_i, \sigma &\sim \mbox{Normal}(\mu_i, \sigma) \\
-\mu_i &= \alpha + \beta_i + \gamma_i\\
-\alpha &\sim \mbox{Normal}(0, 2.5) \\
-\beta &\sim \mbox{Normal}(0, 2.5) \\
-\gamma &\sim \mbox{Normal}(0, 2.5) \\
-\sigma &\sim \mbox{Exponential}(1)
-\end{align}
+\[
+y_i = f(X_i) + \epsilon_i
+\]
 
-We run the model in R [@citeR] using the `rstanarm` package of @rstanarm. We use the default priors from `rstanarm`.
+where $X_i$ is the set of predictors for observation $i$, $f(X_i)$ is the function learned by the XGBoost model, and $\epsilon_i$ represents the residual error.
+
+The model parameters are optimized to minimize the following objective function:
+
+\[
+\mathcal{L}(\Theta) = \sum_{i=1}^N \left(y_i - f(X_i)\right)^2 + \Omega(f)
+\]
+
+where $\mathcal{L}(\Theta)$ is the loss function, $\Theta$ represents the model parameters, and $\Omega(f)$ is a regularization term to prevent overfitting.
+
+### Implementation
+
+The model is trained using the `xgboost` package in R. The hyperparameters are configured as follows:
+- **Number of boosting rounds**: 100
+- **Learning rate ($\eta$)**: 0.1
+- **Maximum tree depth**: 6
+- **Column sampling rate**: 80%
+- **Row sampling rate**: 80%
+- **Objective function**: Squared error regression ($\text{reg:squarederror}$)
+
+### Training and Testing
+
+The training dataset includes observations up to December 31, 2024, while the testing dataset covers the period from January 1, 2025, to March 31, 2025. The predictors include:
+\[
+\{\text{Price\_Lag1}, \text{Price\_Change\_Percent}, \text{volume}, \text{open}, \text{high}, \text{low}, \text{adjusted}\}
+\]
+The outcome variable, $y_i$, is defined as:
+\[
+y_i = \text{Price\_Diff} = \text{close}_i - \text{close}_{i-1}
+\]
 
 
-### Model justification
-
-We expect a positive relationship between the size of the wings and time spent aloft. In particular...
-
-We can use maths by including latex between dollar signs, for instance $\theta$.
-
-
-# Results
-
-Our results are summarized in @tbl-modelresults.
+We run the model in R [@citeR] using the `xgboost` package of @xgboost. 
 
 ```{r}
 #| echo: false
@@ -176,11 +238,64 @@ Our results are summarized in @tbl-modelresults.
 #| warning: false
 #| message: false
 
-library(rstanarm)
+library(xgboost)
 
-first_model <-
-  readRDS(file = here::here("models/first_model.rds"))
+xgb_model <- readRDS("/Users/jamielee/TechStockForecast/models/xgb_model.rds")
+
 ```
+
+## Model justification
+
+The XGBoost regression model is the most suitable approach for predicting daily price differences (**'Price_Diff'**) across a basket of tech stocks, including Google (**GOOG**), Apple (**AAPL**), Amazon (**AMZN**), and Microsoft (**MSFT**). By employing gradient boosting to iteratively minimize prediction errors, XGBoost effectively handles the complex, non-linear relationships inherent in stock price movements. It is particularly well-suited for continuous outcomes like **'Price_Diff'**, which exhibit significant variability driven by historical trends, market activity, and temporal effects. The model's ability to optimize squared error loss while incorporating regularization prevents overfitting and enhances generalizability. Additionally, XGBoost is robust to missing data, automatically manages variable interactions, and is computationally efficient, making it ideal for large datasets in financial analysis.
+
+While alternative approaches, such as traditional linear regression models, could be used, they may not capture the complex interactions between predictors like `Price_Lag1`, **`Price_Change_Percent`**, and **`volume`**. Machine learning models like random forests or neural networks offer high flexibility but may sacrifice computational efficiency and interpretability compared to XGBoost. 
+
+## Model Summary
+
+The model's hyperparameters, set to optimize predictive accuracy and computational efficiency, are displayed in @tbl-model results. It reveals 100 boosting rounds with a learning rate ($\eta$) of 0.1, balancing fast convergence and overfitting control. A maximum tree depth of 6 captures complex interactions among predictors without overfitting. Column and row sampling rates of 0.8 each ensure robustness by introducing randomness into feature and observation selection during tree construction. 
+
+```{r}
+#| echo: false
+#| eval: true
+#| label: tbl-modelsummary
+#| tbl-cap: "Summary of XGBoost Model Hyperparameters"
+#| warning: false
+
+#### Extract Model Information ####
+# Summarize key hyperparameters
+model_summary <- tibble(
+  Metric = c(
+    "Number of Trees (Rounds)", 
+    "Learning Rate (eta)", 
+    "Max Tree Depth", 
+    "Column Sampling Rate", 
+    "Row Sampling Rate", 
+    "Objective Function"
+  ),
+  Value = c(
+    100,  # Number of rounds
+    0.1,  # Learning rate
+    6,    # Max depth
+    0.8,  # Column sampling
+    0.8,  # Row sampling
+    "Squared Error Regression (reg:squarederror)"
+  )
+)
+
+#### Display Model Summary ####
+model_summary %>%
+  kable(
+    col.names = c("Parameter", "Value")
+  ) %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+Furthermore, the model employs the squared error regression objective function (`reg:squarederror`), suitable for continuous outcome variables like **`Price_Diff`**. These hyperparameters enable the model to handle the non-linear relationships and variability inherent in financial data effectively.
+
+# Results
+
+Our results are summarized in @tbl-modelresults.
+
+
 
 ```{r}
 #| echo: false
@@ -189,13 +304,33 @@ first_model <-
 #| tbl-cap: "Explanatory models of flight time based on wing width and wing length"
 #| warning: false
 
-modelsummary::modelsummary(
-  list(
-    "First model" = first_model
-  ),
-  statistic = "mad",
-  fmt = 2
-)
+#### Prepare Prediction Data ####
+# Filter data for the prediction period (e.g., Q1 2025)
+prediction_data <- price_analysis_data %>%
+  filter(date >= as.Date("2025-01-01") & date <= as.Date("2025-03-31"))
+
+# Extract predictors
+predictors <- c("Price_Lag1", "Price_Change_Percent", "volume", 
+                "open", "high", "low", "adjusted")
+
+X_pred <- model.matrix(~ . - 1, data = prediction_data[, predictors])
+
+#### Generate Predictions ####
+# Predict daily price differences
+predicted_diffs <- predict(xgb_model, X_pred)
+
+# Add predictions to the prediction dataset
+prediction_data <- prediction_data %>%
+  mutate(
+    Predicted_Diff = predicted_diffs,
+    Predicted_Close = Price_Lag1 + Predicted_Diff # Calculate predicted closing price
+  )
+
+#### Extract Predictions for Each Stock ####
+predicted_stock_prices <- prediction_data %>%
+  select(symbol, date, Price_Lag1, Predicted_Diff, Predicted_Close) %>%
+  arrange(symbol, date)
+
 ```
 
 
