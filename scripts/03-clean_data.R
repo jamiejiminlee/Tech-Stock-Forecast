@@ -7,38 +7,47 @@
 # Pre-requisites: [...UPDATE THIS...]
 # Any other information needed? [...UPDATE THIS...]
 
-#### Workspace setup ####
+#### Workspace Setup ####
 library(tidyverse)
+library(lubridate)
+library(arrow)
 
-#### Clean data ####
-raw_data <- read_csv("inputs/data/plane_data.csv")
+#### Load Raw Data ####
+# Load the raw data
+raw_google_stock_data <- read_csv("data/01-raw_data/raw_data.csv")
 
-cleaned_data <-
-  raw_data |>
-  janitor::clean_names() |>
-  select(wing_width_mm, wing_length_mm, flying_time_sec_first_timer) |>
-  filter(wing_width_mm != "caw") |>
+#### Data Cleaning ####
+# Clean and preprocess the data
+price_analysis_data <- raw_google_stock_data %>%
+  # Convert the date column to Date type
+  mutate(date = as.Date(date)) %>%
+  
+  # Sort by symbol and date to ensure proper calculation of lagged values
+  arrange(symbol, date) %>%
+  
+  # Add lagged closing price for each stock
+  group_by(symbol) %>%
   mutate(
-    flying_time_sec_first_timer = if_else(flying_time_sec_first_timer == "1,35",
-                                   "1.35",
-                                   flying_time_sec_first_timer)
-  ) |>
-  mutate(wing_width_mm = if_else(wing_width_mm == "490",
-                                 "49",
-                                 wing_width_mm)) |>
-  mutate(wing_width_mm = if_else(wing_width_mm == "6",
-                                 "60",
-                                 wing_width_mm)) |>
-  mutate(
-    wing_width_mm = as.numeric(wing_width_mm),
-    wing_length_mm = as.numeric(wing_length_mm),
-    flying_time_sec_first_timer = as.numeric(flying_time_sec_first_timer)
-  ) |>
-  rename(flying_time = flying_time_sec_first_timer,
-         width = wing_width_mm,
-         length = wing_length_mm
-         ) |> 
-  tidyr::drop_na()
+    Price_Lag1 = lag(close), # Previous day's closing price
+    Price_Diff = close - Price_Lag1, # Daily price difference
+    Price_Change_Percent = (Price_Diff / Price_Lag1) * 100 # Daily percentage change
+  ) %>%
+  
+  # Ungroup after calculations
+  ungroup() %>%
+  
+  # Select relevant columns
+  select(
+    symbol, date, open, high, low, close, volume, adjusted, 
+    Price_Lag1, Price_Diff, Price_Change_Percent
+  ) %>%
+  
+  # Remove rows with NA (e.g., the first day for each stock)
+  drop_na()
 
-#### Save data ####
-write_csv(cleaned_data, "outputs/data/analysis_data.csv")
+#### Save Cleaned Data ####
+# Save the cleaned data as a Parquet file
+write_parquet(price_analysis_data, "data/02-analysis_data/analysis_data.parquet")
+
+
+
