@@ -7,31 +7,55 @@
 # Pre-requisites: [...UPDATE THIS...]
 # Any other information needed? [...UPDATE THIS...]
 
-
-#### Workspace setup ####
+#### Workspace Setup ####
+library(xgboost)
 library(tidyverse)
-library(rstanarm)
+library(arrow)
 
-#### Read data ####
-analysis_data <- read_csv("data/analysis_data/analysis_data.csv")
+#### Load Cleaned Data ####
+# Load the cleaned data
+price_analysis_data <- read_parquet("data/02-analysis_data/analysis_data.parquet")
 
-### Model data ####
-first_model <-
-  stan_glm(
-    formula = flying_time ~ length + width,
-    data = analysis_data,
-    family = gaussian(),
-    prior = normal(location = 0, scale = 2.5, autoscale = TRUE),
-    prior_intercept = normal(location = 0, scale = 2.5, autoscale = TRUE),
-    prior_aux = exponential(rate = 1, autoscale = TRUE),
-    seed = 853
-  )
+#### Prepare the Data ####
+# Define training period (up to Dec 2024)
+training_data <- price_analysis_data %>%
+  filter(date <= as.Date("2024-12-31"))
 
+# Define testing period (Q1 2025)
+testing_data <- price_analysis_data %>%
+  filter(date >= as.Date("2025-01-01") & date <= as.Date("2025-03-31"))
 
-#### Save model ####
+# Define predictors and target
+predictors <- c("Price_Lag1", "Price_Change_Percent", "volume", 
+                "open", "high", "low", "adjusted")
+target <- "Price_Diff"
+
+# Prepare training data matrices
+X_train <- model.matrix(~ . - 1, data = training_data[, predictors])
+y_train <- training_data[[target]]
+
+# Prepare testing data matrices
+X_test <- model.matrix(~ . - 1, data = testing_data[, predictors])
+y_test <- testing_data[[target]]
+
+#### Train the XGBoost Model ####
+xgb_model <- xgboost(
+  data = X_train,
+  label = y_train,
+  nrounds = 100,               # Number of boosting rounds
+  objective = "reg:squarederror", # Regression task for continuous outcome
+  verbose = 1,                 # Print progress
+  eta = 0.1,                   # Learning rate
+  max_depth = 6,               # Maximum tree depth
+  colsample_bytree = 0.8,      # Fraction of columns sampled per tree
+  subsample = 0.8              # Fraction of rows sampled per iteration
+)
+
+#### Save Model ####
+# Save the trained model
 saveRDS(
-  first_model,
-  file = "models/first_model.rds"
+  xgb_model,
+  file = "models/xgb_model.rds"
 )
 
 
