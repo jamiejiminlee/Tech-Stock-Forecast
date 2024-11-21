@@ -88,9 +88,10 @@ These constructed variables allow for a more detailed examination of stock price
 
 The outcome variable for this paper is the **Daily Percentage Change (`Price_Change_Percent`)**, which measures the proportional change in a stock's closing price relative to its previous day’s closing price. This variable is calculated as:
 
-\[
+$$
 \text{Price\_Change\_Percent} = \frac{\text{close} - \text{Price\_Lag1}}{\text{Price\_Lag1}} \times 100
-\]
+$$
+
 
 This metric normalizes price movements across the basket of stocks, enabling meaningful comparisons despite differences in price ranges between stocks such as Google (**GOOG**), Apple (**AAPL**), Amazon (**AMZN**), and Microsoft (**MSFT**). By focusing on percentage changes, the analysis captures the relative daily performance of each stock, providing insights into trends and volatility. This variable is widely used in financial analysis to track and compare stock performance over time, making it a suitable choice for this study.
 
@@ -194,43 +195,23 @@ These assumptions form the foundation of the modeling approach. Addressing poten
 
 Define $y_i$ as the daily price difference for a given stock on day $i$. The predictors include $\text{Price\_Lag1}_i$, the lagged closing price, and other market and temporal features such as $\text{volume}_i$, $\text{open}_i$, $\text{high}_i$, $\text{low}_i$, and $\text{adjusted}_i$. The relationship is modeled as:
 
-\[
+$$
 y_i = f(X_i) + \epsilon_i
-\]
+$$
 
 where $X_i$ is the set of predictors for observation $i$, $f(X_i)$ is the function learned by the XGBoost model, and $\epsilon_i$ represents the residual error.
 
 The model parameters are optimized to minimize the following objective function:
 
-\[
+$$
 \mathcal{L}(\Theta) = \sum_{i=1}^N \left(y_i - f(X_i)\right)^2 + \Omega(f)
-\]
+$$
 
 where $\mathcal{L}(\Theta)$ is the loss function, $\Theta$ represents the model parameters, and $\Omega(f)$ is a regularization term to prevent overfitting.
 
-### Implementation
-
-The model is trained using the `xgboost` package in R. The hyperparameters are configured as follows:
-- **Number of boosting rounds**: 100
-- **Learning rate ($\eta$)**: 0.1
-- **Maximum tree depth**: 6
-- **Column sampling rate**: 80%
-- **Row sampling rate**: 80%
-- **Objective function**: Squared error regression ($\text{reg:squarederror}$)
-
-### Training and Testing
-
-The training dataset includes observations up to December 31, 2024, while the testing dataset covers the period from January 1, 2025, to March 31, 2025. The predictors include:
-\[
-\{\text{Price\_Lag1}, \text{Price\_Change\_Percent}, \text{volume}, \text{open}, \text{high}, \text{low}, \text{adjusted}\}
-\]
-The outcome variable, $y_i$, is defined as:
-\[
-y_i = \text{Price\_Diff} = \text{close}_i - \text{close}_{i-1}
-\]
 
 
-We run the model in R [@citeR] using the `xgboost` package of @xgboost. 
+
 
 ```{r}
 #| echo: false
@@ -297,41 +278,7 @@ Our results are summarized in @tbl-modelresults.
 
 
 
-```{r}
-#| echo: false
-#| eval: true
-#| label: tbl-modelresults
-#| tbl-cap: "Explanatory models of flight time based on wing width and wing length"
-#| warning: false
 
-#### Prepare Prediction Data ####
-# Filter data for the prediction period (e.g., Q1 2025)
-prediction_data <- price_analysis_data %>%
-  filter(date >= as.Date("2025-01-01") & date <= as.Date("2025-03-31"))
-
-# Extract predictors
-predictors <- c("Price_Lag1", "Price_Change_Percent", "volume", 
-                "open", "high", "low", "adjusted")
-
-X_pred <- model.matrix(~ . - 1, data = prediction_data[, predictors])
-
-#### Generate Predictions ####
-# Predict daily price differences
-predicted_diffs <- predict(xgb_model, X_pred)
-
-# Add predictions to the prediction dataset
-prediction_data <- prediction_data %>%
-  mutate(
-    Predicted_Diff = predicted_diffs,
-    Predicted_Close = Price_Lag1 + Predicted_Diff # Calculate predicted closing price
-  )
-
-#### Extract Predictions for Each Stock ####
-predicted_stock_prices <- prediction_data %>%
-  select(symbol, date, Price_Lag1, Predicted_Diff, Predicted_Close) %>%
-  arrange(symbol, date)
-
-```
 
 
 
@@ -369,47 +316,13 @@ In @fig-ppcheckandposteriorvsprior-1 we implement a posterior predictive check. 
 
 In @fig-ppcheckandposteriorvsprior-2 we compare the posterior with the prior. This shows... 
 
-```{r}
-#| eval: true
-#| echo: false
-#| message: false
-#| warning: false
-#| label: fig-ppcheckandposteriorvsprior
-#| layout-ncol: 2
-#| fig-cap: "Examining how the model fits, and is affected by, the data"
-#| fig-subcap: ["Posterior prediction check", "Comparing the posterior with the prior"]
 
-pp_check(first_model) +
-  theme_classic() +
-  theme(legend.position = "bottom")
-
-posterior_vs_prior(first_model) +
-  theme_minimal() +
-  scale_color_brewer(palette = "Set1") +
-  theme(legend.position = "bottom") +
-  coord_flip()
-```
 
 ## Diagnostics
 
-@fig-stanareyouokay-1 is a trace plot. It shows... This suggests...
 
-@fig-stanareyouokay-2 is a Rhat plot. It shows... This suggests...
 
-```{r}
-#| echo: false
-#| eval: true
-#| message: false
-#| warning: false
-#| label: fig-stanareyouokay
-#| fig-cap: "Checking the convergence of the MCMC algorithm"
-#| fig-subcap: ["Trace plot", "Rhat plot"]
-#| layout-ncol: 2
 
-plot(first_model, "trace")
-
-plot(first_model, "rhat")
-```
 
 
 
