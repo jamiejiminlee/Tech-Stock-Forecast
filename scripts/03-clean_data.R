@@ -17,7 +17,6 @@ library(arrow)
 raw_google_stock_data <- read_csv("data/01-raw_data/raw_data.csv")
 
 #### Data Cleaning ####
-# Clean and preprocess the data
 price_analysis_data <- raw_google_stock_data %>%
   # Convert the date column to Date type
   mutate(date = as.Date(date)) %>%
@@ -25,12 +24,16 @@ price_analysis_data <- raw_google_stock_data %>%
   # Sort by symbol and date to ensure proper calculation of lagged values
   arrange(symbol, date) %>%
   
-  # Add lagged closing price for each stock
+  # Add lagged closing price and calculate derived metrics
   group_by(symbol) %>%
   mutate(
     Price_Lag1 = lag(close), # Previous day's closing price
     Price_Diff = close - Price_Lag1, # Daily price difference
-    Price_Change_Percent = (Price_Diff / Price_Lag1) * 100 # Daily percentage change
+    Price_Change_Percent = if_else(
+      !is.na(Price_Lag1) & Price_Lag1 != 0, 
+      (Price_Diff / Price_Lag1) * 100, 
+      NA_real_
+    ) # Daily percentage change
   ) %>%
   
   # Ungroup after calculations
@@ -48,6 +51,4 @@ price_analysis_data <- raw_google_stock_data %>%
 #### Save Cleaned Data ####
 # Save the cleaned data as a Parquet file
 write_parquet(price_analysis_data, "data/02-analysis_data/analysis_data.parquet")
-
-
 

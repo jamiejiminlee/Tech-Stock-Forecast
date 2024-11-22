@@ -47,12 +47,10 @@ Telegraphing paragraph: The remainder of this paper is structured as follows. @s
 
 ## Overview
 
-The data for this paper, obtained from the Yahoo Finance API via the `tidyquant` library in R on November 19, 2024, encompasses historical stock price information for four leading technology companies: Google (GOOG), Apple (AAPL), Amazon (AMZN), and Microsoft (MSFT). This dataset spans from January 1, 2018, to December 31, 2024, providing daily stock market data for each company. Key variables include **`symbol`**, **`date`**, **`open`**, **`high`**, **`low`**, **`close`**, **`volume`**, and **`adjusted`** prices. Our analysis focuses on predicting daily price differences and percentage changes across this basket of stocks, leveraging additional features constructed from the raw dataset. These features include **`Price_Lag1`** (lagged closing prices), **`Price_Diff`** (daily price differences), and **`Price_Change_Percent`** (percentage changes). By incorporating these derived variables, we aim to capture sequential trends and normalize differences across stocks with varying price ranges.
+The data for this paper, obtained from the Yahoo Finance API via the `tidyquant` by library in R on November 19, 2024, encompasses historical stock price information for four leading technology companies: Google (GOOG), Apple (AAPL), Amazon (AMZN), and Microsoft (MSFT). This dataset spans from January 1, 2018, to December 31, 2024, providing daily stock market data for each company. Key variables include **`symbol`**, **`date`**, **`open`**, **`high`**, **`low`**, **`close`**, **`volume`**, and **`adjusted`** prices. Our analysis focuses on predicting daily price differences and percentage changes across this basket of stocks, leveraging additional features constructed from the raw dataset. These features include **`Price_Lag1`** (lagged closing prices), **`Price_Diff`** (daily price differences), and **`Price_Change_Percent`** (percentage changes). By incorporating these derived variables, we aim to capture sequential trends and normalize differences across stocks with varying price ranges.
 
-To ensure reliability, the dataset was preprocessed to remove missing values, align timeframes across stocks, and compute the constructed variables. Observations with incomplete data were excluded to maintain consistency in analysis. Details on the data cleaning and feature construction process are provided in [Appendix -@sec-data-cleaning].
+To ensure reliability, the data was pre-processed to remove missing values, align time-frames across stocks, and compute the constructed variables. Observations with incomplete data were excluded to maintain consistency in analysis. Data cleaning and analysis were conducted using the following packages: the `tidyverse` package of @Tidyverse, `lubridate` package of @Lubridate, and `arrow` package of @arrow. Details on the data cleaning and manipulation process are provided in [Appendix -@sec-data-cleaning].
 
-Data cleaning and analysis were conducted using the following packages: the `tidyverse` package of @Tidyverse, `lubridate` package of @Lubridate, and `arrow` package of @arrow. These tools facilitated efficient data manipulation, feature construction, and storage in a compact Parquet format for further analysis.
-	
 ## Measurement
 
 Stock prices are influenced by numerous factors, including macroeconomic conditions, industry trends, corporate actions, and investor sentiment. These dynamics fluctuate frequently, often in response to earnings reports, geopolitical events, or shifts in market expectations. Financial data simplifies these complex market behaviors into numerical indicators such as **`open`**, **`high`**, **`low`**, and **`close`** prices, which, while precise, may not fully encapsulate underlying investor motivations or market sentiment. For instance, the closing price represents only the last traded price of the day, smoothing out intraday volatility and obscuring more nuanced trading patterns.
@@ -89,10 +87,8 @@ These constructed variables allow for a more detailed examination of stock price
 The outcome variable for this paper is the **Daily Percentage Change (`Price_Change_Percent`)**, which measures the proportional change in a stock's closing price relative to its previous day’s closing price. This variable is calculated as:
 
 $$
-\text{Price\_Change\_Percent} = \frac{\text{close} - \text{Price\_Lag1}}{\text{Price\_Lag1}} \times 100
+\text{Price_Change_Percent} = \frac{\text{close} - \text{Price_Lag1}}{\text{Price_Lag1}} \times 100
 $$
-
-
 This metric normalizes price movements across the basket of stocks, enabling meaningful comparisons despite differences in price ranges between stocks such as Google (**GOOG**), Apple (**AAPL**), Amazon (**AMZN**), and Microsoft (**MSFT**). By focusing on percentage changes, the analysis captures the relative daily performance of each stock, providing insights into trends and volatility. This variable is widely used in financial analysis to track and compare stock performance over time, making it a suitable choice for this study.
 
 ```{r}
@@ -191,7 +187,7 @@ The XGBoost regression model used in this analysis relies on several key assumpt
 
 These assumptions form the foundation of the modeling approach. Addressing potential violations, such as temporal dependencies or changes in feature distributions, will be discussed in the limitations section.
 
-## Model set-up
+## Model Setup
 
 Define $y_i$ as the daily price difference for a given stock on day $i$. The predictors include $\text{Price\_Lag1}_i$, the lagged closing price, and other market and temporal features such as $\text{volume}_i$, $\text{open}_i$, $\text{high}_i$, $\text{low}_i$, and $\text{adjusted}_i$. The relationship is modeled as:
 
@@ -209,9 +205,22 @@ $$
 
 where $\mathcal{L}(\Theta)$ is the loss function, $\Theta$ represents the model parameters, and $\Omega(f)$ is a regularization term to prevent overfitting.
 
+The model is implemented using the `xgboost` package in R. The training dataset includes observations up to December 31, 2024, while the testing dataset covers January to March 2025. The predictors ($X_i$) used include:
 
+- $\text{Price\_Lag1}$: Previous day's closing price,
+- $\text{Price\_Change\_Percent}$: Percentage change from the previous day,
+- $\text{volume}$: Number of shares traded,
+- $\text{open, high, low, adjusted}$: Daily stock metrics.
 
+Key hyperparameters for the model are:
 
+- Learning rate ($\eta$): $0.1$
+- Maximum tree depth: $6$
+- Number of boosting rounds: $100$
+- Sub Sample ratio: $0.8$
+- Column sampling ratio: $0.8$
+
+These hyperparameters are tuned to balance predictive accuracy and prevent overfitting, allowing the model to capture complex relationships in stock price dynamics effectively. Details are further described in @sec-model-summary.
 
 ```{r}
 #| echo: false
@@ -231,7 +240,7 @@ The XGBoost regression model is the most suitable approach for predicting daily 
 
 While alternative approaches, such as traditional linear regression models, could be used, they may not capture the complex interactions between predictors like `Price_Lag1`, **`Price_Change_Percent`**, and **`volume`**. Machine learning models like random forests or neural networks offer high flexibility but may sacrifice computational efficiency and interpretability compared to XGBoost. 
 
-## Model Summary
+## Model Summary {#sec-model-summary}
 
 The model's hyperparameters, set to optimize predictive accuracy and computational efficiency, are displayed in @tbl-model results. It reveals 100 boosting rounds with a learning rate ($\eta$) of 0.1, balancing fast convergence and overfitting control. A maximum tree depth of 6 captures complex interactions among predictors without overfitting. Column and row sampling rates of 0.8 each ensure robustness by introducing randomness into feature and observation selection during tree construction. 
 
@@ -276,7 +285,72 @@ Furthermore, the model employs the squared error regression objective function (
 
 Our results are summarized in @tbl-modelresults.
 
+```{r}
+#| label: fig-pred-price
+#| fig-cap: Actual vs. Predicted Daily Price Differences
+#| echo: false
 
+#### Generate Future Predictions Iteratively ####
+# Initialize the future data
+future_dates <- seq(as.Date("2025-01-01"), as.Date("2025-03-31"), by = "day")
+future_data <- expand.grid(
+  date = future_dates,
+  symbol = unique(price_analysis_data$symbol)
+)
+
+# Use the last known values for predictors
+latest_data <- price_analysis_data %>%
+  group_by(symbol) %>%
+  summarise(
+    Price_Lag1 = last(close, order_by = date),
+    volume = last(volume, order_by = date),
+    open = last(open, order_by = date),
+    high = last(high, order_by = date),
+    low = last(low, order_by = date),
+    adjusted = last(adjusted, order_by = date),
+    .groups = "drop"
+  )
+
+future_data <- future_data %>%
+  left_join(latest_data, by = "symbol") %>%
+  mutate(Price_Change_Percent = 0)  # Initialize percent change to 0
+
+# Initialize Predicted_Diff column in future_data
+future_data$Predicted_Diff <- NA
+
+# Iteratively predict future stock prices for Q1 2025
+for (i in seq_len(nrow(future_data))) {
+    # Prepare matrix for prediction
+    X_future <- model.matrix(~ . - 1, data = future_data[i, predictors])
+    
+    # Predict using the model
+    predicted_diff <- predict(xgb_model, X_future)
+    
+    # Save the prediction
+    future_data$Predicted_Diff[i] <- predicted_diff
+    
+    # Update Price_Lag1 for the next day if applicable
+    if (i < nrow(future_data)) {
+        future_data$Price_Lag1[i + 1] <- future_data$Price_Lag1[i] + predicted_diff
+        future_data$Price_Change_Percent[i + 1] <- (predicted_diff / future_data$Price_Lag1[i]) * 100
+    }
+}
+
+
+# Remove rows without predictions
+future_data <- future_data %>%
+  drop_na(Predicted_Diff)
+
+#### Visualize Updated Predictions ####
+ggplot(future_data, aes(x = date, group = symbol)) +
+  geom_line(aes(y = Price_Lag1 + Predicted_Diff, color = symbol), size = 1) +
+  labs(title = "Predicted Closing Prices for Q1 2025",
+       y = "Predicted Closing Price",
+       x = "Date",
+       color = "Stock Symbol") +
+  theme_minimal()
+
+```
 
 
 
